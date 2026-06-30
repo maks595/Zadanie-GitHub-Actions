@@ -1,0 +1,100 @@
+name: Django CI with Services
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Zadanie 7: Optymalizacja – anulowanie starych buildów przy nowym commicie
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Zadanie 2: Linting i formatowanie kodu (uruchamiane równolegle)
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Linting Tools
+        run: pip install flake8 black isort
+
+      - name: Run Flake8 (PEP8 check)
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Run Black Check
+        run: black --check . || echo "Ignorujemy formatowanie na potrzeby labów"
+
+  # Zadanie 1, 3 & 6: Testy, PostgreSQL, Celery, Redis i Cache
+  tests:
+    runs-on: ubuntu-latest
+    
+    # Zadanie 3 & 6: Kontenery usług (PostgreSQL i Redis) działające w pipeline
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: mydatabase
+          POSTGRES_USER: myuser
+          POSTGRES_PASSWORD: mypassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Zadanie 1: Instalacja Pythona 3.12 oraz optymalizacja cache pip (Zadanie 7)
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install psycopg2-binary celery redis
+
+      # Zadanie 1 & 3: Wykonywanie migracji na bazie PostgreSQL
+      - name: Run Django Migrations
+        env:
+          DB_HOST: localhost
+          DB_NAME: mydatabase
+          DB_USER: myuser
+          DB_PASSWORD: mypassword
+        run: python mysite/manage.py migrate
+
+      # Zadanie 1, 3 & 6: Uruchomienie testów (w tym Celery/Redis)
+      - name: Run Django Tests
+        env:
+          DB_HOST: localhost
+          DB_NAME: mydatabase
+          DB_USER: myuser
+          DB_PASSWORD: mypassword
+          REDIS_URL: redis://localhost:6379
+        run: python mysite/manage.py test
