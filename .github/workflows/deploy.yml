@@ -11,11 +11,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Oficjalne i stabilne przygotowanie Dockera w maszynie GitHub Actions
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker Image
+      - name: Build Docker Image (Native)
         run: |
           echo "Budowanie obrazu kontenera na produkcji..."
           docker build -t django-app:latest .
